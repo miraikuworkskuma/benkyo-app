@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>勉強アプリ — Driveの資料からクイズ&フラッシュカード</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+
+<header class="topbar">
+  <h1 class="logo" id="logo">📚 勉強アプリ</h1>
+  <button class="icon-btn" id="btn-settings" title="設定">⚙️ 設定</button>
+</header>
+
+<main id="app">
+
+  <!-- 設定画面 -->
+  <section class="screen" id="screen-setup" hidden>
+    <div class="card">
+      <h2>初期設定</h2>
+      <p class="muted">このアプリはあなたのブラウザの中だけで動きます。キーが外部のサーバーに送られることはありません。</p>
+
+      <label class="field">
+        <span>Gemini APIキー <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studioで無料発行 ↗</a></span>
+        <input type="password" id="input-gemini-key" placeholder="AIza...">
+      </label>
+
+      <label class="field">
+        <span>Google OAuth クライアントID(Drive読み込み用・管理者から共有されたもの)</span>
+        <input type="text" id="input-client-id" placeholder="xxxx.apps.googleusercontent.com">
+      </label>
+
+      <button class="btn primary" id="btn-save-setup">保存してはじめる</button>
+      <p class="muted small">キーはこの端末のブラウザ(localStorage)にのみ保存されます。</p>
+    </div>
+  </section>
+
+  <!-- ホーム画面 -->
+  <section class="screen" id="screen-home" hidden>
+    <div class="card">
+      <h2>教材をえらぶ</h2>
+      <div id="drive-disconnected">
+        <p class="muted">Googleドライブに接続して、教科書やノート(Googleドキュメント/スライド)を読み込みます。</p>
+        <button class="btn primary" id="btn-connect-drive">Googleドライブに接続</button>
+      </div>
+      <div id="drive-connected" hidden>
+        <div class="searchrow">
+          <input type="search" id="input-search" placeholder="ファイル名で検索…">
+          <button class="btn" id="btn-search">検索</button>
+        </div>
+        <ul class="filelist" id="filelist"></ul>
+      </div>
+    </div>
+
+    <div class="card review-card" id="review-card" hidden>
+      <h2>🔁 復習ボックス</h2>
+      <p class="muted small">間違えた問題・覚えきれなかったカードが自動でたまります。正解するとボックスから消えます。</p>
+      <div class="btn-col">
+        <button class="btn primary" id="btn-review-quiz" hidden></button>
+        <button class="btn primary" id="btn-review-cards" hidden></button>
+        <button class="btn ghost small-btn" id="btn-review-clear">復習ボックスを空にする</button>
+      </div>
+    </div>
+
+    <div class="card" id="history-card" hidden>
+      <h2>これまでの学習</h2>
+      <ul class="historylist" id="historylist"></ul>
+    </div>
+  </section>
+
+  <!-- 生成オプション画面 -->
+  <section class="screen" id="screen-generate" hidden>
+    <div class="card">
+      <h2 id="gen-title">問題をつくる</h2>
+      <p class="muted" id="gen-source"></p>
+
+      <div class="field">
+        <span>学習モード</span>
+        <div class="choice-row">
+          <button class="mode-btn selected" data-mode="quiz" id="mode-quiz">
+            <strong>🧠 理解度クイズ</strong>
+            <small>4択問題で「わかっているか」を確認</small>
+          </button>
+          <button class="mode-btn" data-mode="cards" id="mode-cards">
+            <strong>🃏 暗記カード</strong>
+            <small>用語・定義・年号をフラッシュカードで暗記</small>
+          </button>
+        </div>
+      </div>
+
+      <div class="field">
+        <span>問題数</span>
+        <div class="choice-row">
+          <button class="count-btn" data-count="5">5問</button>
+          <button class="count-btn selected" data-count="10">10問</button>
+          <button class="count-btn" data-count="15">15問</button>
+        </div>
+      </div>
+
+      <label class="field">
+        <span>重点テーマ(任意)</span>
+        <input type="text" id="input-focus" placeholder="例: 第3章だけ / 江戸時代の政策 など">
+      </label>
+
+      <button class="btn primary big" id="btn-generate">生成する</button>
+      <button class="btn ghost" id="btn-gen-back">← 教材選択にもどる</button>
+      <div class="loading" id="gen-loading" hidden>
+        <div class="spinner"></div>
+        <p id="gen-loading-msg">教材を読んで問題をつくっています…</p>
+      </div>
+      <p class="error" id="gen-error" hidden></p>
+    </div>
+  </section>
+
+  <!-- 4択クイズ画面 -->
+  <section class="screen" id="screen-quiz" hidden>
+    <div class="card">
+      <div class="progress"><div class="progress-bar" id="quiz-progress"></div></div>
+      <p class="muted small" id="quiz-counter"></p>
+      <h2 class="question" id="quiz-question"></h2>
+      <div class="answers" id="quiz-answers"></div>
+      <div class="explain" id="quiz-explain" hidden>
+        <p id="quiz-explain-text"></p>
+        <button class="btn primary" id="btn-quiz-next">次へ →</button>
+      </div>
+      <button class="btn ghost small-btn" id="btn-quiz-quit">中断してホームへ</button>
+    </div>
+  </section>
+
+  <!-- クイズ結果画面 -->
+  <section class="screen" id="screen-result" hidden>
+    <div class="card center">
+      <h2 id="result-title"></h2>
+      <p class="score" id="result-score"></p>
+      <p class="muted" id="result-comment"></p>
+      <div id="result-wrong-wrap" hidden>
+        <h3>間違えた問題</h3>
+        <ul class="wronglist" id="result-wronglist"></ul>
+      </div>
+      <div class="btn-col">
+        <button class="btn primary" id="btn-retry-wrong" hidden>間違えた問題だけ再挑戦</button>
+        <button class="btn" id="btn-retry-all">最初からもう一度</button>
+        <button class="btn ghost" id="btn-result-home">ホームへ</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- フラッシュカード画面 -->
+  <section class="screen" id="screen-cards" hidden>
+    <div class="card center">
+      <p class="muted small" id="cards-counter"></p>
+      <div class="flashcard" id="flashcard">
+        <div class="flashcard-inner" id="flashcard-inner">
+          <div class="flashcard-face front" id="card-front"></div>
+          <div class="flashcard-face back" id="card-back"></div>
+        </div>
+      </div>
+      <p class="muted small">カードをタップすると答えが見られます</p>
+      <div class="btn-row" id="cards-judge" hidden>
+        <button class="btn danger" id="btn-card-no">🤔 まだ</button>
+        <button class="btn success" id="btn-card-yes">✅ 覚えた</button>
+      </div>
+      <button class="btn ghost small-btn" id="btn-cards-quit">中断してホームへ</button>
+    </div>
+  </section>
+
+  <!-- カード完了画面 -->
+  <section class="screen" id="screen-cards-done" hidden>
+    <div class="card center">
+      <h2>🎉 全部覚えました!</h2>
+      <p class="muted" id="cards-done-detail"></p>
+      <div class="btn-col">
+        <button class="btn primary" id="btn-cards-again">もう一周する</button>
+        <button class="btn ghost" id="btn-cards-home">ホームへ</button>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
