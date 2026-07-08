@@ -198,6 +198,25 @@ input:focus { outline: 2px solid var(--accent); border-color: transparent; }
 }
 .explain p { margin-top: 0; }
 
+/* 記述式 */
+textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 15px;
+  background: #fcfbf8;
+  font-family: inherit;
+  line-height: 1.6;
+  resize: vertical;
+  margin-bottom: 12px;
+}
+textarea:focus { outline: 2px solid var(--accent); border-color: transparent; }
+textarea:disabled { color: var(--muted); }
+.model-label { font-weight: 700; margin: 0 0 6px; }
+#written-keypoints { margin: 0; padding-left: 20px; font-size: 14px; }
+#written-keypoints li { margin-bottom: 4px; }
+
 .score { font-size: 42px; font-weight: 800; margin: 8px 0; }
 
 .wronglist { text-align: left; margin: 10px 0 6px; }

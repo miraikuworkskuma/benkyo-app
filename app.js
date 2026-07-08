@@ -35,7 +35,7 @@ const $ = (id) => document.getElementById(id);
 
 const SCREENS = [
   "screen-setup", "screen-home", "screen-generate",
-  "screen-quiz", "screen-result", "screen-cards", "screen-cards-done",
+  "screen-quiz", "screen-written", "screen-result", "screen-cards", "screen-cards-done",
 ];
 
 function show(screenId) {
@@ -247,6 +247,19 @@ const CARDS_SCHEMA = {
   },
 };
 
+const WRITTEN_SCHEMA = {
+  type: "ARRAY",
+  items: {
+    type: "OBJECT",
+    properties: {
+      question: { type: "STRING" },
+      modelAnswer: { type: "STRING" },
+      keyPoints: { type: "ARRAY", items: { type: "STRING" } },
+    },
+    required: ["question", "modelAnswer", "keyPoints"],
+  },
+};
+
 function buildPrompt(mode, count, focus, source) {
   const focusLine = focus ? `特に「${focus}」に重点を置いてください。\n` : "";
   const sourceBlock = source.base64
@@ -259,6 +272,18 @@ ${focusLine}条件:
 - 選択肢は必ず4つで、まぎらわしいが明確に誤りとわかる選択肢を混ぜること
 - answerIndex は正解の選択肢の番号(0〜3)
 - explanation には「なぜその答えになるのか」と、間違えやすいポイントを2〜3文で書くこと
+- 教材に書かれている内容だけを根拠にすること
+
+${sourceBlock}`;
+  }
+  if (mode === "written") {
+    return `あなたは優秀な教師です。以下の教材にもとづいて、記述式問題を${count}問、日本語で作成してください。
+${focusLine}条件:
+- 「〜を説明せよ」「〜の理由を述べよ」のように、自分の言葉で説明させる問題にすること
+- 用語の丸暗記ではなく、因果関係・仕組み・比較など理解の深さを問う問題にすること
+- 高校生が2〜4文で答えられる分量にすること
+- modelAnswer には模範解答を2〜4文で書くこと
+- keyPoints には「答えに必ず入っているべき要点」を2〜4個、採点基準として書くこと
 - 教材に書かれている内容だけを根拠にすること
 
 ${sourceBlock}`;
@@ -314,11 +339,15 @@ async function generate() {
   $("btn-generate").disabled = true;
   try {
     const parts = buildParts(state.genMode, state.genCount, focus, state.source);
-    const schema = state.genMode === "quiz" ? QUIZ_SCHEMA : CARDS_SCHEMA;
+    const schema = state.genMode === "quiz" ? QUIZ_SCHEMA : state.genMode === "written" ? WRITTEN_SCHEMA : CARDS_SCHEMA;
     let items = await callGemini(parts, schema);
     if (!Array.isArray(items) || items.length === 0) throw new Error("問題を生成できませんでした。もう一度お試しください。");
     if (state.genMode === "quiz") {
       items = items.filter((q) => Array.isArray(q.choices) && q.choices.length === 4 && q.answerIndex >= 0 && q.answerIndex <= 3);
+      if (items.length === 0) throw new Error("問題の形式が不正でした。もう一度お試しください。");
+    }
+    if (state.genMode === "written") {
+      items = items.filter((q) => q.question && q.modelAnswer && Array.isArray(q.keyPoints));
       if (items.length === 0) throw new Error("問題の形式が不正でした。もう一度お試しください。");
     }
     const entry = saveHistoryEntry({
@@ -328,6 +357,7 @@ async function generate() {
       items,
     });
     if (state.genMode === "quiz") startQuiz(entry, entry.items);
+    else if (state.genMode === "written") startWritten(entry, entry.items);
     else startCards(entry, entry.items);
   } catch (e) {
     $("gen-error").textContent = e.message;
@@ -378,10 +408,10 @@ function renderHistory() {
   ul.innerHTML = "";
   for (const h of history) {
     const li = document.createElement("li");
-    const icon = h.type === "quiz" ? "🧠" : "🃏";
-    const label = h.type === "quiz" ? "理解度クイズ" : "暗記カード";
+    const icon = h.type === "quiz" ? "🧠" : h.type === "written" ? "✍️" : "🃏";
+    const label = h.type === "quiz" ? "理解度クイズ" : h.type === "written" ? "記述式" : "暗記カード";
     const date = new Date(h.createdAt).toLocaleDateString("ja-JP");
-    const scoreText = h.type === "quiz" && h.lastScore != null
+    const scoreText = (h.type === "quiz" || h.type === "written") && h.lastScore != null
       ? ` / 前回 ${h.lastScore}/${h.items.length}問正解` : "";
     li.innerHTML = `<span>${icon}</span>
       <span class="htitle"><span class="ht"></span><small>${label} ${h.items.length}問 · ${date}${scoreText}</small></span>
@@ -390,6 +420,7 @@ function renderHistory() {
     li.querySelector(".ht").textContent = h.sourceName + (h.focus ? `(${h.focus})` : "");
     li.querySelector(".hplay").addEventListener("click", () => {
       if (h.type === "quiz") startQuiz(h, h.items);
+      else if (h.type === "written") startWritten(h, h.items);
       else startCards(h, h.items);
     });
     li.querySelector(".hdelete").addEventListener("click", () => {
@@ -407,8 +438,8 @@ function renderHistory() {
 function loadReview() {
   try {
     const r = JSON.parse(localStorage.getItem(LS.review));
-    return { quiz: r?.quiz || [], cards: r?.cards || [] };
-  } catch { return { quiz: [], cards: [] }; }
+    return { quiz: r?.quiz || [], cards: r?.cards || [], written: r?.written || [] };
+  } catch { return { quiz: [], cards: [], written: [] }; }
 }
 
 function saveReview(r) {
@@ -443,16 +474,33 @@ function removeCardFromReview(front) {
   if (next.length !== r.cards.length) { r.cards = next; saveReview(r); }
 }
 
+function addWrittenToReview(question, sourceName) {
+  const r = loadReview();
+  if (!r.written.some((q) => q.question === question.question)) {
+    r.written.push({ ...question, sourceName });
+    saveReview(r);
+  }
+}
+
+function removeWrittenFromReview(questionText) {
+  const r = loadReview();
+  const next = r.written.filter((q) => q.question !== questionText);
+  if (next.length !== r.written.length) { r.written = next; saveReview(r); }
+}
+
 function renderReview() {
   const r = loadReview();
-  const has = r.quiz.length > 0 || r.cards.length > 0;
+  const has = r.quiz.length > 0 || r.cards.length > 0 || r.written.length > 0;
   $("review-card").hidden = !has;
   const qBtn = $("btn-review-quiz");
   const cBtn = $("btn-review-cards");
+  const wBtn = $("btn-review-written");
   qBtn.hidden = r.quiz.length === 0;
   cBtn.hidden = r.cards.length === 0;
+  wBtn.hidden = r.written.length === 0;
   qBtn.textContent = `🧠 苦手なクイズを復習(${r.quiz.length}問)`;
   cBtn.textContent = `🃏 苦手なカードを復習(${r.cards.length}枚)`;
+  wBtn.textContent = `✍️ 苦手な記述式を復習(${r.written.length}問)`;
 }
 
 function startReviewQuiz() {
@@ -467,16 +515,22 @@ function startReviewCards() {
   startCards({ id: "review", sourceName: "復習ボックス", items }, items);
 }
 
+function startReviewWritten() {
+  const items = loadReview().written;
+  if (items.length === 0) return;
+  startWritten({ id: "review", sourceName: "復習ボックス", items }, items);
+}
+
 function clearReview() {
   if (!confirm("復習ボックスを空にしますか?")) return;
-  saveReview({ quiz: [], cards: [] });
+  saveReview({ quiz: [], cards: [], written: [] });
   renderReview();
 }
 
 /* ---------- 4択クイズ ---------- */
 
 function startQuiz(entry, items) {
-  state.session = { entry, items, index: 0, wrong: [], correct: 0 };
+  state.session = { kind: "quiz", entry, items, index: 0, wrong: [], correct: 0 };
   show("screen-quiz");
   renderQuizQuestion();
 }
@@ -562,6 +616,89 @@ function finishQuiz() {
   show("screen-result");
 }
 
+/* ---------- 記述式問題 ---------- */
+
+function startWritten(entry, items) {
+  state.session = { kind: "written", entry, items, index: 0, wrong: [], correct: 0 };
+  show("screen-written");
+  renderWrittenQuestion();
+}
+
+function renderWrittenQuestion() {
+  const s = state.session;
+  const q = s.items[s.index];
+  $("written-progress").style.width = (s.index / s.items.length) * 100 + "%";
+  $("written-counter").textContent = `${s.index + 1} / ${s.items.length} 問`;
+  $("written-question").textContent = q.question;
+  $("written-answer").value = "";
+  $("written-answer").disabled = false;
+  $("written-model").hidden = true;
+  $("btn-written-reveal").hidden = false;
+}
+
+function revealWritten() {
+  const s = state.session;
+  const q = s.items[s.index];
+  $("written-answer").disabled = true;
+  $("written-model-text").textContent = q.modelAnswer;
+  const ul = $("written-keypoints");
+  ul.innerHTML = "";
+  for (const p of q.keyPoints || []) {
+    const li = document.createElement("li");
+    li.textContent = p;
+    ul.appendChild(li);
+  }
+  $("written-model").hidden = false;
+  $("btn-written-reveal").hidden = true;
+}
+
+function judgeWritten(ok) {
+  const s = state.session;
+  const q = s.items[s.index];
+  if (ok) {
+    s.correct++;
+    removeWrittenFromReview(q.question); // 書けた → 復習ボックスから外す
+  } else {
+    s.wrong.push(q);
+    addWrittenToReview(q, s.entry.sourceName); // 書けなかった → 復習ボックスに追加
+  }
+  s.index++;
+  if (s.index < s.items.length) renderWrittenQuestion();
+  else finishWritten();
+}
+
+function finishWritten() {
+  const s = state.session;
+  const total = s.items.length;
+  if (s.items === s.entry.items) updateHistoryEntry(s.entry.id, { lastScore: s.correct });
+
+  $("result-title").textContent = s.correct === total ? "🎉 全問書けました!" : "おつかれさま!";
+  $("result-score").textContent = `${s.correct} / ${total}`;
+  const rate = s.correct / total;
+  $("result-comment").textContent =
+    rate === 1 ? "この範囲は自分の言葉で説明できています。" :
+    rate >= 0.7 ? "よく書けています。書けなかった問題の模範解答を音読して仕上げましょう。" :
+    rate >= 0.4 ? "基礎はできています。採点ポイントを意識してもう一度書いてみましょう。" :
+    "まずは模範解答を読んで、要点を整理してから再挑戦するのがおすすめです。";
+
+  const hasWrong = s.wrong.length > 0;
+  $("result-wrong-wrap").hidden = !hasWrong;
+  $("btn-retry-wrong").hidden = !hasWrong;
+  if (hasWrong) {
+    const ul = $("result-wronglist");
+    ul.innerHTML = "";
+    for (const q of s.wrong) {
+      const li = document.createElement("li");
+      li.innerHTML = `<div class="wq"></div><div class="wa"></div><div class="we"></div>`;
+      li.querySelector(".wq").textContent = q.question;
+      li.querySelector(".wa").textContent = "模範解答: " + q.modelAnswer;
+      li.querySelector(".we").textContent = "採点ポイント: " + (q.keyPoints || []).join(" / ");
+      ul.appendChild(li);
+    }
+  }
+  show("screen-result");
+}
+
 /* ---------- フラッシュカード ---------- */
 
 function startCards(entry, items) {
@@ -635,13 +772,25 @@ function init() {
 
   $("btn-review-quiz").addEventListener("click", startReviewQuiz);
   $("btn-review-cards").addEventListener("click", startReviewCards);
+  $("btn-review-written").addEventListener("click", startReviewWritten);
   $("btn-review-clear").addEventListener("click", clearReview);
 
   $("btn-quiz-next").addEventListener("click", nextQuiz);
   $("btn-quiz-quit").addEventListener("click", () => { if (confirm("中断してホームに戻りますか?")) goHome(); });
-  $("btn-retry-wrong").addEventListener("click", () => startQuiz(state.session.entry, state.session.wrong));
-  $("btn-retry-all").addEventListener("click", () => startQuiz(state.session.entry, state.session.entry.items));
+  $("btn-retry-wrong").addEventListener("click", () => {
+    const s = state.session;
+    (s.kind === "written" ? startWritten : startQuiz)(s.entry, s.wrong);
+  });
+  $("btn-retry-all").addEventListener("click", () => {
+    const s = state.session;
+    (s.kind === "written" ? startWritten : startQuiz)(s.entry, s.entry.items);
+  });
   $("btn-result-home").addEventListener("click", goHome);
+
+  $("btn-written-reveal").addEventListener("click", revealWritten);
+  $("btn-written-yes").addEventListener("click", () => judgeWritten(true));
+  $("btn-written-no").addEventListener("click", () => judgeWritten(false));
+  $("btn-written-quit").addEventListener("click", () => { if (confirm("中断してホームに戻りますか?")) goHome(); });
 
   $("flashcard").addEventListener("click", flipCard);
   $("btn-card-yes").addEventListener("click", () => judgeCard(true));
