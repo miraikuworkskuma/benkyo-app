@@ -42,7 +42,7 @@
     <div class="card">
       <h2>教材をえらぶ</h2>
       <div id="drive-disconnected">
-        <p class="muted">Googleドライブに接続して、教科書やノート(Googleドキュメント/スライド)を読み込みます。</p>
+        <p class="muted">Googleドライブに接続して、教科書やノート(Googleドキュメント/スライド/PDF/画像)を読み込みます。</p>
         <button class="btn primary" id="btn-connect-drive">Googleドライブに接続</button>
       </div>
       <div id="drive-connected" hidden>
@@ -60,6 +60,7 @@
       <div class="btn-col">
         <button class="btn primary" id="btn-review-quiz" hidden></button>
         <button class="btn primary" id="btn-review-cards" hidden></button>
+        <button class="btn primary" id="btn-review-written" hidden></button>
         <button class="btn ghost small-btn" id="btn-review-clear">復習ボックスを空にする</button>
       </div>
     </div>
@@ -86,6 +87,10 @@
           <button class="mode-btn" data-mode="cards" id="mode-cards">
             <strong>🃏 暗記カード</strong>
             <small>用語・定義・年号をフラッシュカードで暗記</small>
+          </button>
+          <button class="mode-btn" data-mode="written" id="mode-written">
+            <strong>✍️ 記述式</strong>
+            <small>自分の言葉で説明できるかを確認</small>
           </button>
         </div>
       </div>
@@ -126,6 +131,31 @@
         <button class="btn primary" id="btn-quiz-next">次へ →</button>
       </div>
       <button class="btn ghost small-btn" id="btn-quiz-quit">中断してホームへ</button>
+    </div>
+  </section>
+
+  <!-- 記述式問題画面 -->
+  <section class="screen" id="screen-written" hidden>
+    <div class="card">
+      <div class="progress"><div class="progress-bar" id="written-progress"></div></div>
+      <p class="muted small" id="written-counter"></p>
+      <h2 class="question" id="written-question"></h2>
+      <textarea id="written-answer" rows="5" placeholder="自分の言葉で答えを書いてみましょう"></textarea>
+      <button class="btn primary" id="btn-written-reveal">模範解答とくらべる</button>
+      <div id="written-model" hidden>
+        <div class="explain">
+          <p class="model-label">📖 模範解答</p>
+          <p id="written-model-text"></p>
+          <p class="model-label">✔ 採点ポイント</p>
+          <ul id="written-keypoints"></ul>
+        </div>
+        <p class="muted small">採点ポイントが自分の答えに入っていたかチェックして、自己採点しましょう。</p>
+        <div class="btn-row">
+          <button class="btn danger" id="btn-written-no">🤔 書けなかった</button>
+          <button class="btn success" id="btn-written-yes">⭕ 書けた</button>
+        </div>
+      </div>
+      <button class="btn ghost small-btn" id="btn-written-quit">中断してホームへ</button>
     </div>
   </section>
 
