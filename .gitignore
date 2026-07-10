@@ -1,2 +1,6 @@
 .claude/settings.local.json
 .DS_Store
+
+# 別プロジェクトの原本(公開はfire-simulator/kakei-lifeplanリポジトリ)
+FIREシミュレーター.html
+家計管理・ライフプラン.html

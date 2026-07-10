@@ -12,6 +12,13 @@
       "runtimeExecutable": "python3",
       "runtimeArgs": ["-m", "http.server", "8766", "--directory", "/Users/makoto/先生アプリ"],
       "port": 8766
+    },
+    {
+      "name": "gakushu-shien",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "python3 -m http.server \"$PORT\" --directory /Users/makoto/学習支援"],
+      "port": 8767,
+      "autoPort": true
     }
   ]
 }
