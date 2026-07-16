@@ -40,6 +40,21 @@
   <!-- ホーム画面 -->
   <section class="screen" id="screen-home" hidden>
     <div class="card">
+      <h2>今日はどっち?</h2>
+      <p class="muted small">目的をえらぶと、AIが問題の作り方を変えます。</p>
+      <div class="choice-row">
+        <button class="mode-btn purpose-btn selected" data-purpose="yoshu" id="home-yoshu">
+          <strong>📖 予習する</strong>
+          <small>これから習う範囲。基礎と全体像をやさしく確認</small>
+        </button>
+        <button class="mode-btn purpose-btn" data-purpose="fukushu" id="home-fukushu">
+          <strong>🔁 復習する</strong>
+          <small>習ったところ。応用・弱点で仕上げる</small>
+        </button>
+      </div>
+    </div>
+
+    <div class="card" id="material-card">
       <h2>教材をえらぶ</h2>
       <div id="drive-disconnected">
         <p class="muted">Googleドライブに接続して、教科書やノート(Googleドキュメント/スライド/PDF/画像)を読み込みます。</p>
@@ -76,6 +91,20 @@
     <div class="card">
       <h2 id="gen-title">問題をつくる</h2>
       <p class="muted" id="gen-source"></p>
+
+      <div class="field">
+        <span>学習の目的</span>
+        <div class="choice-row">
+          <button class="mode-btn purpose-btn selected" data-purpose="yoshu">
+            <strong>📖 予習</strong>
+            <small>基礎・全体像をやさしく</small>
+          </button>
+          <button class="mode-btn purpose-btn" data-purpose="fukushu">
+            <strong>🔁 復習</strong>
+            <small>応用・弱点を重点的に</small>
+          </button>
+        </div>
+      </div>
 
       <div class="field">
         <span>学習モード</span>

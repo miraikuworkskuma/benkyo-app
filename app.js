@@ -26,6 +26,7 @@ const state = {
   source: null, // { id, name, text } または { id, name, mimeType, base64 }(スキャンPDF/画像)
   genMode: "quiz",
   genCount: 10,
+  purpose: "yoshu", // 学習の目的: "yoshu"(予習) / "fukushu"(復習)
   session: null, // 進行中のクイズ/カード
 };
 
@@ -203,6 +204,7 @@ function blobToBase64(blob) {
 
 function openGenerate() {
   $("gen-source").textContent = "教材: " + state.source.name;
+  selectPurpose(state.purpose); // 生成画面の予習/復習ボタンを現在の目的に合わせる
   $("gen-error").hidden = true;
   $("gen-loading").hidden = true;
   $("btn-generate").disabled = false;
@@ -211,7 +213,21 @@ function openGenerate() {
 
 function selectMode(mode) {
   state.genMode = mode;
-  document.querySelectorAll(".mode-btn").forEach((b) => b.classList.toggle("selected", b.dataset.mode === mode));
+  // [data-mode] で絞る(予習/復習ボタンも .mode-btn 見た目を流用しているため巻き込まない)
+  document.querySelectorAll(".mode-btn[data-mode]").forEach((b) => b.classList.toggle("selected", b.dataset.mode === mode));
+}
+
+function selectPurpose(purpose) {
+  state.purpose = purpose;
+  // ホームと生成画面、両方の「予習/復習」ボタンの選択状態を合わせる
+  document.querySelectorAll(".purpose-btn").forEach((b) => b.classList.toggle("selected", b.dataset.purpose === purpose));
+}
+
+// ホームの入口ボタン: 目的を決めて教材選択へ誘導する
+function choosePurposeFromHome(purpose) {
+  selectPurpose(purpose);
+  const card = $("material-card");
+  if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function selectCount(count) {
@@ -260,14 +276,17 @@ const WRITTEN_SCHEMA = {
   },
 };
 
-function buildPrompt(mode, count, focus, source) {
+function buildPrompt(mode, count, focus, source, purpose) {
   const focusLine = focus ? `特に「${focus}」に重点を置いてください。\n` : "";
+  const purposeLine = purpose === "fukushu"
+    ? "この教材はすでに一度学習した範囲です(復習)。定着を確かめるのが目的なので、標準〜やや難しめにし、応用・因果関係・比較・間違えやすいポイントを重点的に問うてください。\n"
+    : "この教材はこれから学ぶ範囲です(予習)。まず全体像と基本の用語・流れをつかむのが目的なので、やさしめ〜標準の難易度にし、細かい応用より土台となる大事な点を中心に問うてください。\n";
   const sourceBlock = source.base64
     ? `教材「${source.name}」は添付したファイル(スキャン画像/PDF)を参照してください。`
     : `=== 教材「${source.name}」ここから ===\n${source.text}\n=== 教材ここまで ===`;
   if (mode === "quiz") {
     return `あなたは優秀な教師です。以下の教材にもとづいて、内容の理解を深めるための4択問題を${count}問、日本語で作成してください。
-${focusLine}条件:
+${focusLine}${purposeLine}条件:
 - 単純な用語の暗記ではなく、概念の理解・因果関係・比較・応用を問う問題を中心にすること
 - 選択肢は必ず4つで、まぎらわしいが明確に誤りとわかる選択肢を混ぜること
 - answerIndex は正解の選択肢の番号(0〜3)
@@ -278,7 +297,7 @@ ${sourceBlock}`;
   }
   if (mode === "written") {
     return `あなたは優秀な教師です。以下の教材にもとづいて、記述式問題を${count}問、日本語で作成してください。
-${focusLine}条件:
+${focusLine}${purposeLine}条件:
 - 「〜を説明せよ」「〜の理由を述べよ」のように、自分の言葉で説明させる問題にすること
 - 用語の丸暗記ではなく、因果関係・仕組み・比較など理解の深さを問う問題にすること
 - 高校生が2〜4文で答えられる分量にすること
@@ -289,7 +308,7 @@ ${focusLine}条件:
 ${sourceBlock}`;
   }
   return `あなたは優秀な教師です。以下の教材から、暗記すべき重要事項(用語・定義・人名・年号・公式など)を選び、フラッシュカードを${count}枚、日本語で作成してください。
-${focusLine}条件:
+${focusLine}${purposeLine}条件:
 - front はシンプルな問いかけまたは用語(例:「〇〇とは?」「△△が起きた年は?」)
 - back は答え+一言の補足。長くても3行以内
 - 教材の中で特に重要なものから順に選ぶこと
@@ -298,8 +317,8 @@ ${focusLine}条件:
 ${sourceBlock}`;
 }
 
-function buildParts(mode, count, focus, source) {
-  const parts = [{ text: buildPrompt(mode, count, focus, source) }];
+function buildParts(mode, count, focus, source, purpose) {
+  const parts = [{ text: buildPrompt(mode, count, focus, source, purpose) }];
   if (source.base64) parts.push({ inlineData: { mimeType: source.mimeType, data: source.base64 } });
   return parts;
 }
@@ -338,7 +357,7 @@ async function generate() {
   $("gen-loading").hidden = false;
   $("btn-generate").disabled = true;
   try {
-    const parts = buildParts(state.genMode, state.genCount, focus, state.source);
+    const parts = buildParts(state.genMode, state.genCount, focus, state.source, state.purpose);
     const schema = state.genMode === "quiz" ? QUIZ_SCHEMA : state.genMode === "written" ? WRITTEN_SCHEMA : CARDS_SCHEMA;
     let items = await callGemini(parts, schema);
     if (!Array.isArray(items) || items.length === 0) throw new Error("問題を生成できませんでした。もう一度お試しください。");
@@ -354,6 +373,7 @@ async function generate() {
       type: state.genMode,
       sourceName: state.source.name,
       focus,
+      purpose: state.purpose,
       items,
     });
     if (state.genMode === "quiz") startQuiz(entry, entry.items);
@@ -410,11 +430,13 @@ function renderHistory() {
     const li = document.createElement("li");
     const icon = h.type === "quiz" ? "🧠" : h.type === "written" ? "✍️" : "🃏";
     const label = h.type === "quiz" ? "理解度クイズ" : h.type === "written" ? "記述式" : "暗記カード";
+    // 古い履歴には purpose が無いのでその場合はバッジ非表示
+    const purposeLabel = h.purpose === "yoshu" ? "📖 予習 · " : h.purpose === "fukushu" ? "🔁 復習 · " : "";
     const date = new Date(h.createdAt).toLocaleDateString("ja-JP");
     const scoreText = (h.type === "quiz" || h.type === "written") && h.lastScore != null
       ? ` / 前回 ${h.lastScore}/${h.items.length}問正解` : "";
     li.innerHTML = `<span>${icon}</span>
-      <span class="htitle"><span class="ht"></span><small>${label} ${h.items.length}問 · ${date}${scoreText}</small></span>
+      <span class="htitle"><span class="ht"></span><small>${purposeLabel}${label} ${h.items.length}問 · ${date}${scoreText}</small></span>
       <button class="btn hplay">学習する</button>
       <button class="hdelete" title="削除">🗑</button>`;
     li.querySelector(".ht").textContent = h.sourceName + (h.focus ? `(${h.focus})` : "");
@@ -765,7 +787,10 @@ function init() {
   $("btn-search").addEventListener("click", () => listFiles($("input-search").value.trim()));
   $("input-search").addEventListener("keydown", (e) => { if (e.key === "Enter") listFiles(e.target.value.trim()); });
 
-  document.querySelectorAll(".mode-btn").forEach((b) => b.addEventListener("click", () => selectMode(b.dataset.mode)));
+  document.querySelectorAll(".mode-btn[data-mode]").forEach((b) => b.addEventListener("click", () => selectMode(b.dataset.mode)));
+  document.querySelectorAll(".purpose-btn").forEach((b) => b.addEventListener("click", () => selectPurpose(b.dataset.purpose)));
+  $("home-yoshu").addEventListener("click", () => choosePurposeFromHome("yoshu"));
+  $("home-fukushu").addEventListener("click", () => choosePurposeFromHome("fukushu"));
   document.querySelectorAll(".count-btn").forEach((b) => b.addEventListener("click", () => selectCount(Number(b.dataset.count))));
   $("btn-generate").addEventListener("click", generate);
   $("btn-gen-back").addEventListener("click", goHome);
