@@ -6,7 +6,7 @@
 ## 要点
 - 静的Webアプリ(HTML/CSS/生JSのみ。ビルドなし・フレームワークなし)
 - 公開先: https://miraikuworkskuma.github.io/benkyo-app (GitHub Pages)
-- AIは利用者自身のGemini APIキー(gemini-2.5-flash)。運営者の費用ゼロが絶対条件
+- AIは利用者自身のGemini APIキー(gemini-3.5-flash)。運営者の費用ゼロが絶対条件
 - `FIREシミュレーター.html` と `家計管理・ライフプラン.html` は別プロジェクトの原本。
   それぞれ fire-simulator / kakei-lifeplan リポジトリに公開されている(編集したら公開側にも反映する)
 

@@ -1,7 +1,7 @@
 /* 勉強アプリ — Google Driveの資料からクイズ&フラッシュカードを生成
  * すべてブラウザ内で完結する(サーバーなし)。
  * - Google Identity Services で Drive の読み取りトークンを取得
- * - Gemini API (gemini-2.5-flash) で問題を生成
+ * - Gemini API (gemini-3.5-flash) で問題を生成
  * - キー・学習履歴は localStorage に保存
  */
 
@@ -14,7 +14,7 @@ const LS = {
   review: "benkyo.review",
 };
 
-const GEMINI_MODEL = "gemini-2.5-flash";
+const GEMINI_MODEL = "gemini-3.5-flash";
 const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.readonly";
 const MAX_SOURCE_CHARS = 60000; // 長すぎる教材は先頭から切り詰める
 const MAX_BINARY_BYTES = 15 * 1024 * 1024; // Gemini inlineData の実用上限(base64化で約20MB以内に収める)
@@ -344,6 +344,7 @@ async function callGemini(parts, schema) {
   );
   if (res.status === 429) throw new Error("Gemini無料枠の上限に達しました。1分ほど待つか、明日また試してください。");
   if (res.status === 400 || res.status === 403) throw new Error("Gemini APIキーが正しくない可能性があります。設定画面で確認してください。");
+  if (res.status === 404) throw new Error("AIモデルが提供終了になった可能性があります。アプリの管理者(くま先生)に連絡してください。");
   if (!res.ok) throw new Error("問題の生成に失敗しました (" + res.status + ")");
   const data = await res.json();
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
